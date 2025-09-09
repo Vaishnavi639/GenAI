@@ -1,0 +1,4 @@
+import gensim.downloader as api
+glove_model=api.load("glove-wiki-gigaword-50")
+print("vector for computer:",glove_model['computer'])
+print("similarty between capmuter and laptop:", glove_model.similarity('computer','laptop'))
