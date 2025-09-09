@@ -1,0 +1,10 @@
+!pip install gensim
+from gensim.models import Word2Vec
+sentences=[
+    ["I","Love","India"],
+    ["AI","Is","The","Future"],
+    ["ML","IS","A","Part","Of","AI"],
+]
+model=Word2Vec(sentences, window=2,min_count=1,vector_size=10,sg=1)
+print("Learning vector", model.wv[('AI')])
+print("similar words to AI:",model.wv.most_similar('AI'))
