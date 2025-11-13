@@ -1,0 +1,71 @@
+# Install required packages
+!pip install transformers torch rouge-score sacrebleu
+
+from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
+from rouge_score import rouge_scorer
+from sacrebleu.metrics import BLEU
+
+# Load models
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+qa_pipeline = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+
+# Text Summarization Task
+text = """
+Artificial intelligence is transforming the world in unprecedented ways.
+Machine learning algorithms are being used in healthcare to diagnose diseases,
+in finance to detect fraud, and in transportation for autonomous vehicles.
+Deep learning has enabled breakthroughs in natural language processing and
+computer vision. However, ethical concerns about AI bias and job displacement
+remain significant challenges that society must address.
+"""
+
+reference_summary = "AI is revolutionizing healthcare, finance, and transportation through machine learning, but ethical concerns persist."
+
+generated_summary = summarizer(text, max_length=50, min_length=20)[0]['summary_text']
+print("Generated Summary:", generated_summary)
+
+# Question Answering Task
+context = """
+The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.
+It is named after the engineer Gustave Eiffel, whose company designed and built the tower.
+Constructed from 1887 to 1889, it was initially criticized by some of France's leading
+artists and intellectuals for its design, but it has become a global cultural icon of France.
+"""
+
+question = "When was the Eiffel Tower built?"
+reference_answer = "1887 to 1889"
+
+qa_result = qa_pipeline(question=question, context=context)
+generated_answer = qa_result['answer']
+print(f"\nQuestion: {question}")
+print(f"Generated Answer: {generated_answer}")
+
+# Evaluate Summarization with ROUGE
+scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+rouge_scores = scorer.score(reference_summary, generated_summary)
+
+print("\n--- ROUGE Scores (Summarization) ---")
+for key, value in rouge_scores.items():
+    print(f"{key}: Precision={value.precision:.4f}, Recall={value.recall:.4f}, F1={value.fmeasure:.4f}")
+
+# Evaluate QA with BLEU
+bleu = BLEU()
+bleu_score = bleu.sentence_score(generated_answer, [reference_answer])
+print(f"\n--- BLEU Score (QA) ---")
+print(f"BLEU: {bleu_score.score:.4f}")
+
+# Multiple prompt testing
+print("\n--- Testing Multiple Prompts ---")
+
+prompts = [
+    {"text": "Climate change is causing rising sea levels.", "task": "summarization"},
+    {"question": "Who designed the Eiffel Tower?", "context": context, "task": "qa"}
+]
+
+for prompt in prompts:
+    if prompt["task"] == "summarization":
+        result = summarizer(prompt["text"], max_length=30)[0]['summary_text']
+        print(f"Summary: {result}")
+    elif prompt["task"] == "qa":
+        result = qa_pipeline(question=prompt["question"], context=prompt["context"])
+        print(f"Q: {prompt['question']}\nA: {result['answer']}")
