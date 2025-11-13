@@ -1,0 +1,83 @@
+# Install required packages
+!pip install transformers datasets peft accelerate torch
+
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, DataCollatorForLanguageModeling
+from datasets import load_dataset
+from peft import LoraConfig, get_peft_model, TaskType
+import math
+
+# Load model and tokenizer
+model_name = "distilgpt2"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer.pad_token = tokenizer.eos_token
+model = AutoModelForCausalLM.from_pretrained(model_name)
+
+# Configure LoRA
+lora_config = LoraConfig(
+    task_type=TaskType.CAUSAL_LM,
+    r=8,
+    lora_alpha=32,
+    lora_dropout=0.1,
+    target_modules=["c_attn"]
+)
+model = get_peft_model(model, lora_config)
+model.print_trainable_parameters()
+
+# Load smaller dataset
+dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="train[:1000]")
+
+def tokenize_function(examples):
+    return tokenizer(examples["text"], truncation=True, max_length=64)
+
+tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+tokenized_dataset = tokenized_dataset.train_test_split(test_size=0.1)
+
+# Data collator
+data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+# Faster training arguments
+training_args = TrainingArguments(
+    output_dir="./lora-distilgpt2",
+    num_train_epochs=1,
+    per_device_train_batch_size=8,
+    save_steps=1000,
+    logging_steps=50,
+    learning_rate=5e-4,
+    fp16=torch.cuda.is_available(),
+    save_total_limit=1
+)
+
+# Train
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_dataset["train"],
+    data_collator=data_collator
+)
+
+trainer.train()
+
+# Generate text
+model.eval()
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model.to(device)
+
+prompts = ["The future of AI", "Once upon a time"]
+
+for prompt in prompts:
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    outputs = model.generate(
+        **inputs,
+        max_length=80,
+        temperature=0.8,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id
+    )
+    print(f"\nPrompt: {prompt}")
+    print(f"Generated: {tokenizer.decode(outputs[0], skip_special_tokens=True)}\n")
+
+# Quick perplexity calculation
+eval_results = trainer.evaluate(tokenized_dataset["test"])
+perplexity = math.exp(eval_results['eval_loss'])
+print(f"Perplexity: {perplexity:.2f}")
