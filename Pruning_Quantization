@@ -1,0 +1,71 @@
+!pip install transformers torch torch-pruning psutil
+import torch
+import torch.nn.utils.prune as prune
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import time
+import psutil
+import os
+model_name = "distilbert-base-uncased"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name)
+def measure_performance(model, inputs, label="Model"):
+    process = psutil.Process(os.getpid())
+    mem_before = process.memory_info().rss / 1024 / 1024
+
+    model.eval()
+    with torch.no_grad():
+        start_time = time.time()
+        for _ in range(100):
+            outputs = model(**inputs)
+        end_time = time.time()
+
+    inference_time = (end_time - start_time) / 100 * 1000
+    mem_after = process.memory_info().rss / 1024 / 1024
+    model_size = sum(p.numel() * p.element_size() for p in model.parameters()) / 1024 / 1024
+
+    print(f"\n {label}")
+    print(f"model size: {model_size:.2f} MB")
+    print(f"memory usage: {mem_after:.2f} MB")
+    print(f"inference time: {inference_time:.4f} ms")
+measure_performance(model, inputs, "original model")
+
+pruned_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+for name, module in pruned_model.named_modules():
+    if isinstance(module, torch.nn.Linear):
+        prune.l1_unstructured(module, name='weight', amount=0.3)
+        prune.remove(module, 'weight')
+
+measure_performance(pruned_model, inputs, "pruned model")
+
+quantized_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+
+quantized_model = torch.quantization.quantize_dynamic(
+    quantized_model,
+    {torch.nn.Linear},
+    dtype=torch.qint8
+)
+
+measure_performance(quantized_model, inputs, "quantized model")
+
+combined_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+
+for name, module in combined_model.named_modules():
+    if isinstance(module, torch.nn.Linear):
+        prune.l1_unstructured(module, name='weight', amount=0.3)
+        prune.remove(module, 'weight')
+
+combined_model = torch.quantization.quantize_dynamic(
+    combined_model,
+    {torch.nn.Linear},
+    dtype=torch.qint8
+)
+
+measure_performance(combined_model, inputs, "pruned and quantized model")
+
+with torch.no_grad():
+    original_output = model(**inputs).logits
+    optimized_output = combined_model(**inputs).logits
+
+
+
+    return model_size, mem_after, inference_time
