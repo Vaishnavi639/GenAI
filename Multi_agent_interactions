@@ -1,0 +1,76 @@
+import random
+
+class Agent:
+    def __init__(self, name, position):
+        self.name = name
+        self.position = position
+        self.energy = 100
+        self.resources = 0
+
+    def decide_action(self, environment):
+        """Agent decides what to do based on current state"""
+        if self.energy < 30:
+            return "rest"
+        elif environment.resources[self.position] > 0:
+            return "collect"
+        else:
+            return "move"
+
+    def execute_action(self, action, environment):
+        """Execute the decided action"""
+        if action == "rest":
+            self.energy = min(100, self.energy + 20)
+            print(f"{self.name} is resting. Energy: {self.energy}")
+
+        elif action == "collect":
+            resource = environment.resources[self.position]
+            self.resources += resource
+            environment.resources[self.position] = 0
+            self.energy -= 10
+            print(f"{self.name} collected {resource} resources. Total: {self.resources}")
+
+        elif action == "move":
+            old_pos = self.position
+            self.position = random.randint(0, len(environment.resources) - 1)
+            self.energy -= 5
+            print(f"{self.name} moved from location {old_pos} to {self.position}")
+
+class Environment:
+    def __init__(self, size=5):
+        self.resources = [random.randint(0, 10) for _ in range(size)]
+        print(f"Environment initialized with resources: {self.resources}")
+
+# ========== SIMULATION ==========
+print("=" * 50)
+print("MULTI-AGENT AUTONOMOUS SYSTEM")
+print("=" * 50)
+
+# Create environment
+env = Environment(size=5)
+
+# Create agents
+agent1 = Agent("Agent-A", position=0)
+agent2 = Agent("Agent-B", position=2)
+agents = [agent1, agent2]
+
+# Run simulation for 10 steps
+print("\n--- SIMULATION START ---\n")
+for step in range(10):
+    print(f"Step {step + 1}:")
+    for agent in agents:
+        action = agent.decide_action(env)
+        agent.execute_action(action, env)
+    print()
+
+# Results
+print("=" * 50)
+print("FINAL RESULTS")
+print("=" * 50)
+for agent in agents:
+    print(f"{agent.name}: Resources={agent.resources}, Energy={agent.energy}, Position={agent.position}")
+
+print("\nAnalysis:")
+print(f"• Total resources collected: {sum(a.resources for a in agents)}")
+print(f"• Agent-A collected: {agent1.resources}")
+print(f"• Agent-B collected: {agent2.resources}")
+print(f"• Agents made autonomous decisions based on energy and resources")
